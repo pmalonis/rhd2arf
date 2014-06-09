@@ -28,8 +28,14 @@ poststim = 10;
 % name of the group in the arf file in which the data will be saved.
 
 %% Getting file sizes and if needed stimulus times 
+
 rhdfiles = dir([dirname '/*.rhd']);
-arf_filename = strcat(rhdfiles(1).name(1:end-11), '.arf')
+if isempty(rhdfiles)
+    err = MException('ResultChk:OutOfRange', ...
+        'No RHD files (*.rhd) in current folder!');
+    throw(err)
+end
+arf_filename = strcat(rhdfiles(1).name(1:end-11), '.arf');
 % getting total length of recording
 
 % size of tempurature array
