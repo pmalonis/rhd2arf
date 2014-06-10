@@ -1,15 +1,19 @@
+%function rhd2arf(dirname)
 
+%if nargin < 1
+dirname = pwd();
+%end
 %directories = {'2014-05-15_7dd0_site_1', '2014-05-15_7dd0_site_2','2014-05-15_7dd0_site_3'};
 %directories = {'2014-05-13'};
-directories = {'2014-05-16/site_1','2014-05-16/site_1_settle',...
-    '2014-05-16/site_2','2014-05-16/site_2_settle'};
+%directories = {'2014-05-16/site_1','2014-05-16/site_1_settle',...
+%    '2014-05-16/site_2','2014-05-16/site_2_settle'};
 
-addpath('arf/matlab') 
+%addpath('arf/matlab') 
 
-for arf_idx = 1:length(directories)
-dirname = ['k405/' directories{arf_idx}];
+%for arf_idx = 1:length(directories)
+%dirname = ['k405/' directories{arf_idx}];
 
-arf_filename = ['k405_' strrep(directories{arf_idx},'/','_') '.arf'];
+%arf_filename = ['k405_' strrep(directories{arf_idx},'/','_') '.arf'];
 groupname = 'evoked';
 pulse_channel = 'ADC-06';
 separate_trials = false;
@@ -24,7 +28,14 @@ poststim = 10;
 % name of the group in the arf file in which the data will be saved.
 
 %% Getting file sizes and if needed stimulus times 
+
 rhdfiles = dir([dirname '/*.rhd']);
+if isempty(rhdfiles)
+    err = MException('ResultChk:OutOfRange', ...
+        'No RHD files (*.rhd) in current folder!');
+    throw(err)
+end
+arf_filename = strcat(rhdfiles(1).name(1:end-11), '.arf');
 % getting total length of recording
 
 % size of tempurature array
@@ -286,4 +297,4 @@ else
 end
 
 
-end
+%end
