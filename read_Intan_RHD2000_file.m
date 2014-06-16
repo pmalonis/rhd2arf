@@ -1,4 +1,7 @@
-function read_Intan_RHD2000_file(filename)
+function [amplifier_channels, amplifier_data, board_adc_channels,...
+          board_adc_data,frequency_parameters,notes,spike_triggers,...,
+          t_amplifier,t_board_adc,t_temp_sensor,temp_sensor_data]...
+          =read_Intan_RHD2000_file(filename)
 
 % read_Intan_RHD2000_file
 %
@@ -502,6 +505,7 @@ else
 end
 fprintf(1, 'Type ''whos'' to see variables.\n');
 fprintf(1, '\n');
+
 
 return
 

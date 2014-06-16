@@ -1,20 +1,43 @@
+function rhd2arf(dirname, arf_filename, groupname, varargin)
 
-%directories = {'2014-05-15_7dd0_site_1', '2014-05-15_7dd0_site_2','2014-05-15_7dd0_site_3'};
-%directories = {'2014-05-13'};
-directories = {'2014-05-16/site_1','2014-05-16/site_1_settle',...
-    '2014-05-16/site_2','2014-05-16/site_2_settle'};
+%rhd2arf(DIRNAME,ARF_FILENAME,GROUPNAME) creates an .arf file with name ARF_FILENAME
+%from the .rhd files in the directory DIRNAME.  A single dataset will be created
+%for each channel, and all of them will be placed in the group GROUPNAME.
+%
+%rhd2arf(DIRNAME,ARF_FILENAME,GROUPNAME,PULSE_CHANNEL,PRESTIM,POSTSTIM) 
+%creates an .arf file with a separate group for each stimulus presentation.
+%This requires a channel that records a pulse at the onset of each
+%stimulus.  The name of this channel should be specified by PULSE_CHANNEL.
+%The base name of each group will be GROUPNAME.
+%PRESTIM seconds before each stimulus onset that will be saved in the
+%arf file and POSTSTIM seconds after.
+%
+%The names of the each channels should be used to specify information about
+%the data.  If the channel name of the format NAME_DATATYPE.    
 
-addpath('arf/matlab') 
+disp(length(varargin)==3 && ischar(varargin{1}))
 
-for arf_idx = 1:length(directories)
-dirname = ['k405/' directories{arf_idx}];
+p = inputParser;
 
-arf_filename = ['k405_' strrep(directories{arf_idx},'/','_') '.arf'];
-groupname = 'evoked';
-pulse_channel = 'ADC-06';
-separate_trials = false;
-prestim = 2;
-poststim = 10;
+addRequired(p,'dirname', @ischar);
+addRequired(p,'arf_filename', @ischar);
+addRequired(p,'groupname', @ischar);
+addOptional(p,'pulse_channel', '', @(x) (length(varargin)==3) && ischar(x))
+addOptional(p,'prestim', 0, @(x) length(varargin)==3 && x>=0 && isnumeric(x))
+addOptional(p,'poststim', 0, @(x) length(varargin)==3 && x>=0 && isnumeric(x))
+
+parse(p, dirname, arf_filename, groupname, varargin{:});
+%converting p.Results into variables
+for f = fieldnames(p.Results)' 
+    evalc([f{1} '= p.Results.(f{1})']); 
+end
+
+if length(varargin) == 3
+    separate_trials = true;
+else
+    separate_trials = false;
+end
+
 
 % rhd2(dirname, arf_filename, groupname) reads all of the intan .rhd files in the
 % directory given by "dirname" and saves them in an arf file.
@@ -31,11 +54,13 @@ rhdfiles = dir([dirname '/*.rhd']);
 temp_size = 0;
 %file relative stimulus times
 file_rel_stim = cell(length(rhdfiles),1);
-file_rel_window = cell(length(rhdfiles),1);
 dset_size = 0;
 for  i = 1:length(rhdfiles)
-    read_Intan_RHD2000_file([dirname '/' ...
-        rhdfiles(i).name])
+    [amplifier_channels, amplifier_data, board_adc_channels,...
+     board_adc_data,frequency_parameters,notes,spike_triggers,...,
+     t_amplifier,t_board_adc,t_temp_sensor,temp_sensor_data]...
+        = read_Intan_RHD2000_file([dirname '/' rhdfiles(i).name]);
+          
     % ensures that channel names are consistent across rhd files
     if i == 1
         first_channels = [amplifier_channels, board_adc_channels];
@@ -58,30 +83,32 @@ for  i = 1:length(rhdfiles)
                 'Pulse channel does not exist in all files');
             throw(err)
         end
-        pulse_data = board_adc_data(pulse_ch_idx,:);
-        
-        % use multiple of median based estimator of standard deviation for
-        % threshould to detect pulses
-        thr = 0.5;%100 * median(abs(pulse_data)/.6745);
-        file_rel_stim{i} = find(pulse_data(1:end-1) < ...
-            thr & pulse_data(2:end) > thr);
-        %         sr = frequency_parameters.amplifier_sample_rate;
-        %
-        %         k=0;
-        %         for stim = file_rel_stim{i}
-        %             file_rel_window{i}(k,:) = (stim-prestim*sr):(stim+poststim*sr);
-        %         end
+        pulse_data = board_adc_data(pulse_ch_idx,:);           
+        %Finds the sample of stimulus onset relative to the start of each
+        %file.  Samples are found where signal crosses a threshold, and
+        %for each crossing the maximum sample in a window following the 
+        %threshold crossing is found.     
+        thr_factor = 200; %factor number of standard deviations used as threshold to detect pulses
+        pulse_winsize = 1000; %number of samples after threshold crossing to look for max
+        thr = thr_factor * median(abs(pulse_data)/.6745);%0.6745 converts to estimator of standard deviation
+        [~, crossings] = find(pulse_data(1:end-1) < ...
+                         thr & pulse_data(2:end) > thr);
+        for c = crossings
+            [~, pulse_max] = max(pulse_data(c:c+pulse_winsize));
+            file_rel_stim{i} = [file_rel_stim{i}, c+pulse_max];
+        end
+ 
     else
         dset_size = dset_size + size(amplifier_data, 2);
     end
     
     % getting size of datasets to pass to arfcreate
-    %temp_size = temp_size + size(temp_sensor_data,2);
+    % temp_size = temp_size + size(temp_sensor_data,2);
     
 end
 if separate_trials
     sr = frequency_parameters.amplifier_sample_rate;
-    dset_size = sr*prestim + sr*poststim + 1;
+    dset_size = sr*prestim + sr*poststim;
 end
 
 %% Creating Datasets
@@ -117,7 +144,8 @@ for i = 1:length(all_channels)
         ch_num = '';
     else
         [ch_name, datatype] = channel_args{1:2};
-        if ~any(str2double(datatype) == [0:6 1000:1002 2000:2002])
+        valid_datatypes = [0:6 1000:1002 2000:2002];
+        if ~any(str2double(datatype) == valid_datatypes)
             warning(['Invalid datatype ' datatype ' for channel ' ...
                 all_channels(i).custom_channel_name])
         end
@@ -135,7 +163,7 @@ for i = 1:length(all_channels)
                     '/' ch_name];
             else
                 datasetnames{group_idx,i} = ['/' groupname '_' sprintf('%04d',group_idx-1)...
-                    '/' ch_name '_' ch_name];
+                    '/' ch_name '_' ch_num];
             end
             arfcreate(arf_filename, datasetnames{group_idx,i}, dset_size, ...
                 'arf_datatype', str2double(datatype), 'sampling_rate', ...
@@ -143,7 +171,7 @@ for i = 1:length(all_channels)
             %saving channel attributes
             channel_fields = fields(all_channels)';
             for att_name = channel_fields
-                h5writeatt(arf_filename, datasetnames{group_idx,i}, ...
+                arfwriteatt(arf_filename, datasetnames{group_idx,i}, ...
                     att_name{1}, all_channels(i).(att_name{1}))
             end
         end
@@ -157,7 +185,7 @@ for i = 1:length(all_channels)
         %saving channel attributes
         channel_fields = fields(all_channels)';
         for att_name = channel_fields
-            h5writeatt(arf_filename, datasetnames{i}, ...
+            arfwriteatt(arf_filename, datasetnames{i}, ...
                 att_name{1}, all_channels(i).(att_name{1}))
         end
     end
@@ -169,16 +197,15 @@ for i = 1:length(all_channels)
         for att_name = spkt_fields
             if separate_trials
                 for group_idx = 1:nstim
-                    h5writeatt(arf_filename, datasetnames{group_idx,i}, ...
+                    arfwriteatt(arf_filename, datasetnames{group_idx,i}, ...
                         att_name{1}, spike_triggers(i).(att_name{1}));
                 end
             else
-                h5writeatt(arf_filename, datasetnames{i}, ...
+                arfwriteatt(arf_filename, datasetnames{i}, ...
                     att_name{1}, spike_triggers(i).(att_name{1}));
             end
         end
     end
-    disp('created a dset/group')
 end
 
 %% Writing Data
@@ -191,9 +218,10 @@ trial_counter = 1;
 % indicates whether to it is necessary to write trial from previous file
 previous_stim = false;
 for i = 1:length(rhdfiles)
-    
-    read_Intan_RHD2000_file([dirname '/' ...
-        rhdfiles(i).name])
+    [amplifier_channels, amplifier_data, board_adc_channels,...
+     board_adc_data,frequency_parameters,notes,spike_triggers,...
+     t_amplifier,t_board_adc,t_temp_sensor,temp_sensor_data]...
+        = read_Intan_RHD2000_file([dirname '/' rhdfiles(i).name]);
     all_data = [amplifier_data;board_adc_data];
       
     % reading tempurature data
@@ -208,7 +236,7 @@ for i = 1:length(rhdfiles)
         if previous_stim
             stim_start = file_rel_stim{i-1}(end);
             sr = frequency_parameters.amplifier_sample_rate;
-            trial_indices = stim_start + [(-1*sr*prestim):(sr*poststim)];
+            trial_indices = stim_start + [(-1*sr*prestim):(sr*poststim-1)];
             for ch_idx = 1:length(all_channels)
                     h5write(arf_filename, datasetnames{trial_counter,ch_idx}, ...
                         combined_data(ch_idx,trial_indices))
@@ -218,7 +246,7 @@ for i = 1:length(rhdfiles)
         
         for stim_start = file_rel_stim{i}
             sr = frequency_parameters.amplifier_sample_rate;
-            trial_indices = stim_start + [(-1*sr*prestim):(sr*poststim)];
+            trial_indices = stim_start + [(-1*sr*prestim):(sr*poststim-1)];
             
             if any(trial_indices < 1)
                 %covers the case where part of a trial is in the
@@ -254,36 +282,33 @@ for i = 1:length(rhdfiles)
                 size(all_data,2))
         end
     end
-    disp('wrote a file')
+
 sample_counter = sample_counter + size(amplifier_data,2);
 previous_data = all_data;
 end
 % saving group level attributes
-%     h5writeatt(arf_filename, ['/' groupname], 'tempurature', temp_data);
-%     h5writeatt(arf_filename, ['/' groupname], 'time_tempurature', t_temp);
+%     arfwriteatt(arf_filename, ['/' groupname], 'tempurature', temp_data);
+%     arfwriteatt(arf_filename, ['/' groupname], 'time_tempurature', t_temp);
 
 notes_cell = struct2cell(notes)';
 if separate_trials
     for group_idx = 1:nstim
         entryname = ['/' groupname '_' sprintf('%04d',group_idx-1)];
-        h5writeatt(arf_filename, entryname, ...
+        arfwriteatt(arf_filename, entryname, ...
             'notes', strjoin(notes_cell,'\n'));
         freq_param_fields = fields(frequency_parameters)';
         for att_name = freq_param_fields
-            h5writeatt(arf_filename,entryname,att_name{1}, ...
+            arfwriteatt(arf_filename,entryname,att_name{1}, ...
                 frequency_parameters.(att_name{1}));
         end
     end
 else
-    h5writeatt(arf_filename, ['/' groupname], ...
+    arfwriteatt(arf_filename, ['/' groupname], ...
         'notes', strjoin(notes_cell,'\n'));
     
     freq_param_fields = fields(frequency_parameters)';
     for att_name = freq_param_fields
-        h5writeatt(arf_filename,['/' groupname], att_name{1},...
+        arfwriteatt(arf_filename,['/' groupname], att_name{1},...
             frequency_parameters.(att_name{1}));
     end
-end
-
-
 end
