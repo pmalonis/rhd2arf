@@ -91,8 +91,8 @@ for  i = 1:length(rhdfiles)
         thr_factor = 200; %factor number of standard deviations used as threshold to detect pulses
         pulse_winsize = 1000; %number of samples after threshold crossing to look for max
         thr = thr_factor * median(abs(pulse_data)/.6745);%0.6745 converts to estimator of standard deviation
-        [~, crossings] = find(pulse_data(1:end-1) < ...
-                         thr & pulse_data(2:end) > thr);
+        [~, crossings] = find(pulse_data(1:end-1) < thr ...
+                          & pulse_data(2:end) > thr);
         for c = crossings
             [~, pulse_max] = max(pulse_data(c:c+pulse_winsize));
             file_rel_stim{i} = [file_rel_stim{i}, c+pulse_max];
@@ -236,7 +236,7 @@ for i = 1:length(rhdfiles)
         if previous_stim
             stim_start = file_rel_stim{i-1}(end);
             sr = frequency_parameters.amplifier_sample_rate;
-            trial_indices = stim_start + [(-1*sr*prestim):(sr*poststim-1)];
+            trial_indices = stim_start + [(-1*round(sr*prestim)-1):(round(sr*poststim)-2)];
             for ch_idx = 1:length(all_channels)
                     h5write(arf_filename, datasetnames{trial_counter,ch_idx}, ...
                         combined_data(ch_idx,trial_indices))
