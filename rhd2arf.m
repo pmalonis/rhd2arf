@@ -246,8 +246,7 @@ for i = 1:length(rhdfiles)
         
         for stim_start = file_rel_stim{i}
             sr = frequency_parameters.amplifier_sample_rate;
-            trial_indices = stim_start + [(-1*sr*prestim):(sr*poststim-1)];
-            
+            trial_indices = stim_start + [(-1*round(sr*prestim)-1):(round(sr*poststim)-2)];
             if any(trial_indices < 1)
                 %covers the case where part of a trial is in the
                 %previous file
