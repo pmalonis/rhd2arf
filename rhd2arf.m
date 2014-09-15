@@ -128,7 +128,7 @@ for i = 1:length(all_channels)
         ch_num = '';
     else
         [ch_name, datatype] = channel_args{1:2};
-        if ~any(str2double(datatype) == [0:6 1000:1002 2000:2002])
+        if ~any(str2double(datatype) == [0:6 23 1000:1002 2000:2002])
             warning(['Invalid datatype ' datatype ' for channel ' ...
                 all_channels(i).custom_channel_name])
         end
