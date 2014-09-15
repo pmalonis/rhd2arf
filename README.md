@@ -14,3 +14,17 @@ Usage
 
 * In Matlab, navigate to a folder containing ONLY rhd files from a single, continuous session and enter `rhd2arf` in the Matlab terminal.
 
+
+Channel Naming Convention
+------------------------------
+
+Rhd2arf allows the channel name to contain arf metadata as follows (ctrl+R to rename channels):
+
+`NAME_DATATYPE_CHANNEL`
+
+where NAME is the name of the channel, DATATYPE is the arf datatype (see the [arf spec](https://github.com/melizalab/arf/blob/master/specification.org)) and CHANNEL is the channel number.
+
+For example: `HP01_23_7`, will have the name HP01 the datatype 23 and the channel number 7.
+
+
+
